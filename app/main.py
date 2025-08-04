@@ -1,5 +1,3 @@
-
-
 import streamlit as st
 from PIL import Image
 
@@ -7,8 +5,6 @@ from PIL import Image
 st.set_page_config(page_title="StyloScope - AI Fashion Agent", layout="centered")
 
 
-# logo = Image.open("assets/logo.png")
-# st.image(logo, width=150)
 
 st.markdown("""
     <h1 style='text-align: center; color: #6C3483;'>👗 StyloScope</h1>
