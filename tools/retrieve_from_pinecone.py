@@ -24,45 +24,99 @@ clip_model = clip_model.to(device)
 tokenizer = open_clip.get_tokenizer("ViT-B-32")
 
 @tool("retrieve_from_pinecone", return_direct=True)
-def retrieve_from_pinecone(user_id: str, text: str = None, image_bytes: bytes = None, top_k: int = 5) -> str:
+def retrieve_from_pinecone(user_id: str, text: str = None, image_bytes: bytes = None, top_k: int = 5) -> dict:
     """
-    Retrieve the most similar items from Pinecone for a specific user given a text or image query. Returns top_k results with metadata.
-    Provide either text or image_bytes. Image queries use CLIP, text queries use text-embedding-ada-002. Only returns results for the given user_id.
+    Retrieve the most similar items from Pinecone for a specific user given a text and/or image query.
+    Provide either or both text and image_bytes. Image queries use CLIP, text queries use text-embedding-ada-002. Only returns results for the given user_id.
+
+    Returns:
+        A dictionary with the following format:
+        {
+            "image_results": [
+                {
+                    "id": str,           # Vector ID
+                    "score": float,     # Similarity score
+                    "metadata": dict,   # Metadata stored with the vector
+                    "image_data": str   # Original image data (e.g., base64 or URL) if available
+                },
+                ...
+            ],
+            "text_results": [
+                {
+                    "id": str,           # Vector ID
+                    "score": float,     # Similarity score
+                    "metadata": dict,   # Metadata stored with the vector
+                    "text": str         # Original text if available
+                },
+                ...
+            ]
+        }
+        If there are errors, the lists will contain error messages instead of result dicts.
     """
+    results = {"image_results": [], "text_results": []}
+
+    # Image query
     if image_bytes:
-        # Get CLIP embedding for image
         try:
             image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
             image_input = preprocess(image).unsqueeze(0).to(device)
             with torch.no_grad():
                 embedding = clip_model.encode_image(image_input).cpu().numpy().tolist()[0]
         except Exception as e:
-            return f"Failed to get CLIP embedding for image: {e}"
-    elif text:
-        # Use Pinecone's internal embedding model for text
-        embed_response = pinecone.embeddings.generate(
-            model="text-embedding-ada-002",
-            texts=[text]
-        )
-        embedding = embed_response["data"][0]["embedding"]
-    else:
-        return "No text or image provided for retrieval."
+            results["image_results"] = [{"error": f"Failed to get CLIP embedding for image: {e}"}]
+        else:
+            try:
+                query_response = index.query(
+                    vector=embedding,
+                    top_k=top_k,
+                    include_metadata=True,
+                    filter={"user_id": user_id, "type": "image"}
+                )
+                matches = query_response.get("matches", [])
+                results["image_results"] = [
+                    {
+                        "id": match.get("id"),
+                        "score": match.get("score", 0),
+                        "metadata": match.get("metadata", {}),
+                        "image_data": match.get("metadata", {}).get("image_data")
+                    }
+                    for match in matches
+                ]
+            except Exception as e:
+                results["image_results"] = [{"error": f"Error querying Pinecone for image: {e}"}]
 
-    # Query Pinecone
-    try:
-        query_response = index.query(vector=embedding, top_k=top_k*2, include_metadata=True)  # fetch more to allow filtering
-        matches = query_response.get("matches", [])
-        user_matches = [
-            match for match in matches
-            if match.get("metadata", {}).get("user_id") == user_id
-        ]
-        if not user_matches:
-            return f"No similar items found for user_id: {user_id}."
-        results = []
-        for match in user_matches[:top_k]:
-            meta = match.get("metadata", {})
-            score = match.get("score", 0)
-            results.append(f"ID: {match.get('id')} | Score: {score:.3f} | Metadata: {meta}")
-        return "\n".join(results)
-    except Exception as e:
-        return f"Error querying Pinecone: {e}"
+    # Text query
+    if text:
+        try:
+            embed_response = pinecone.embeddings.generate(
+                model="text-embedding-ada-002",
+                texts=[text]
+            )
+            embedding = embed_response["data"][0]["embedding"]
+        except Exception as e:
+            results["text_results"] = [{"error": f"Failed to get embedding for text: {e}"}]
+        else:
+            try:
+                query_response = index.query(
+                    vector=embedding,
+                    top_k=top_k,
+                    include_metadata=True,
+                    filter={"user_id": user_id, "type": "text"}
+                )
+                matches = query_response.get("matches", [])
+                results["text_results"] = [
+                    {
+                        "id": match.get("id"),
+                        "score": match.get("score", 0),
+                        "metadata": match.get("metadata", {}),
+                        "text": match.get("metadata", {}).get("text")
+                    }
+                    for match in matches
+                ]
+            except Exception as e:
+                results["text_results"] = [{"error": f"Error querying Pinecone for text: {e}"}]
+
+    if not image_bytes and not text:
+        return {"error": "No text or image provided for retrieval."}
+
+    return results
