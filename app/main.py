@@ -1,5 +1,9 @@
 import streamlit as st
 from PIL import Image
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'db')))
+from users import register_user, authenticate_user
 
 # App Configuration
 st.set_page_config(page_title="StyloScope - AI Fashion Agent", layout="centered")
@@ -16,15 +20,39 @@ st.markdown("---")
 st.markdown("### Who are you?")
 user_type = st.selectbox("Choose your role:", ["-- Select --", "Designer", "User"])
 
-if user_type == "Designer":
-    st.success("Welcome, Creative Designer! Let's build your fashion vision.")
-    if st.button("Enter Designer Workspace"):
-        st.switch_page("pages/designer_view.py")  # requires Streamlit >= 1.22
+if "user_id" not in st.session_state:
+    st.session_state.user_id = None
+if "auth_mode" not in st.session_state:
+    st.session_state.auth_mode = "login"
 
-elif user_type == "User":
-    st.success("Welcome, Fashion Enthusiast! Let's find your style.")
-    if st.button("Enter User Hub"):
-        st.switch_page("pages/user_view.py")
+if user_type in ["Designer", "User"]:
+    st.success(f"Welcome, {user_type}! Please log in or register.")
+    st.session_state.auth_mode = st.radio("Select mode:", ["login", "register"], horizontal=True, key="auth_mode_radio")
+    email = st.text_input("Email", key="email")
+    password = st.text_input("Password", type="password", key="password")
+    if st.session_state.auth_mode == "register":
+        if st.button("Register"):
+            user_id = register_user(email, password)
+            if user_id:
+                st.success("Registration successful! Please log in.")
+            else:
+                st.error("Email already exists. Please log in or use another email.")
+    else:
+        if st.button("Login"):
+            user_id = authenticate_user(email, password)
+            if user_id:
+                st.session_state.user_id = user_id
+                st.success("Login successful!")
+            else:
+                st.error("Invalid credentials. Please try again.")
+
+    if st.session_state.user_id:
+        if user_type == "Designer":
+            if st.button("Enter Designer Workspace"):
+                st.switch_page("pages/designer_view.py")
+        elif user_type == "User":
+            if st.button("Enter User Hub"):
+                st.switch_page("pages/user_view.py")
 
 # Footer
 st.markdown("---")
