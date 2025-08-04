@@ -19,13 +19,14 @@ def fetch_search_results(query: str, num_results: int = 5):
     return results
 
 @tool("web_search", return_direct=True)
-def web_search(prompt: str) -> str:
+def web_search(prompt: str, user_id: str = None) -> str:
     """
-    Performs a web search for the given prompt and returns a summarized string of key points from the top results.
+    Performs a web search for fashion trends and returns a summarized string of key points from the top results.
     Args:
-        prompt: The search query (e.g., 'latest AI research breakthroughs').
+        prompt: The search query about fashion trends (e.g., '2025 summer fashion trends').
+        user_id: The ID of the user making the request (automatically handled).
     Returns:
-        str: A summary of the top results found online.
+        str: A summary of the fashion trends found online.
     """
     try:
         links = fetch_search_results(prompt)

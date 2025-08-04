@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-import pinecone
+from pinecone import Pinecone, ServerlessSpec
 from langchain.tools import tool
 from PIL import Image
 import io
@@ -10,13 +10,12 @@ import open_clip
 # Load Pinecone API key from .env
 load_dotenv()
 PINECONE_API_KEY = os.getenv("pinecone_api_key")
-PINECONE_ENV = os.getenv("pinecone_env", "us-east-1-aws")
+PINECONE_ENV = os.getenv("pinecone_env", "us-east-1")
 
 # Initialize Pinecone
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
-
+pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = "designer-multimodal-index"
-index = pinecone.Index(INDEX_NAME)
+index = pc.Index(INDEX_NAME)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="laion2b_e16")
@@ -88,8 +87,8 @@ def retrieve_from_pinecone(user_id: str, text: str = None, image_bytes: bytes = 
     # Text query
     if text:
         try:
-            embed_response = pinecone.embeddings.generate(
-                model="text-embedding-ada-002",
+            embed_response = pc.embeddings.generate(
+                model="llama-text-embed-v2",
                 texts=[text]
             )
             embedding = embed_response["data"][0]["embedding"]

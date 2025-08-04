@@ -5,14 +5,19 @@ from sklearn.cluster import KMeans
 from langchain.tools import tool
 
 @tool("extract_color_palette", return_direct=True)
-def extract_color_palette(image_bytes: bytes, num_colors: int = 5) -> dict:
+def extract_color_palette(image_bytes: bytes, num_colors: int = 5, user_id: str = None) -> dict:
     """
     Extracts the dominant colors from an image and returns a list of hex color codes.
     Args:
         image_bytes: The image file as bytes.
         num_colors: Number of dominant colors to extract (default 5).
+        user_id: The ID of the user making the request (automatically handled).
     Returns:
-        dict: {"hex_colors": [list of hex color codes]}
+        dict: {
+            "hex_colors": [list of hex color codes],
+            "user_id": str,
+            "num_colors": int
+        }
     """
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
