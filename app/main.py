@@ -42,21 +42,22 @@ if user_type in ["Designer", "User"]:
             user_id = authenticate_user(email, password)
             if user_id:
                 st.session_state.user_id = user_id
-                st.success("Login successful!")
+                st.success("Login successful! Redirecting...")
+                # Auto-redirect based on user type
+                if user_type == "Designer":
+                    st.switch_page("pages/designer_view.py")
+                elif user_type == "User":
+                    st.switch_page("pages/user_view.py")
             else:
                 st.error("Invalid credentials. Please try again.")
 
-    if st.session_state.user_id:
-        if user_type == "Designer":
-            if st.button("Enter Designer Workspace"):
-                st.switch_page("pages/designer_view.py")
-        elif user_type == "User":
-            if st.button("Enter User Hub"):
-                st.switch_page("pages/user_view.py")
+    # Show workspace info if not yet logged in
+    if not st.session_state.user_id and user_type in ["Designer", "User"]:
+        st.info(f"After logging in, you'll be automatically redirected to the {user_type} workspace.")
 
 # Footer
 st.markdown("---")
 st.markdown(
-    "<p style='text-align: center; color: grey;'>Built with ❤️ using LangChain & OpenAI</p>",
+    "<p style='text-align: center; color: grey;'>Built with ❤️ using LangChain & Gemini</p>",
     unsafe_allow_html=True
 )
