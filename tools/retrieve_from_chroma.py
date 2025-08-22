@@ -7,6 +7,9 @@ import torch
 import open_clip
 from typing import List, Dict, Any
 
+# Disable ChromaDB telemetry to prevent errors
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+
 # Local vector store (ChromaDB)
 try:
     from chromadb import PersistentClient  # type: ignore

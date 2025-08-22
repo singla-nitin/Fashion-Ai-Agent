@@ -2,57 +2,133 @@ import os
 from dotenv import load_dotenv
 from langchain.tools import tool
 import base64
-from google import genai
-from google.genai import types
+import requests
 from PIL import Image
 from io import BytesIO
+import streamlit as st
+import time
 
-# Load Google API key from .env
+# Load API keys from .env
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+
+def enhance_design_prompt(prompt: str, image_context: str = None) -> str:
+    """
+    Enhance the basic prompt for image generation
+    """
+    enhanced_prompt = f"high quality professional fashion design, {prompt}, studio lighting, clean background, detailed fabric texture, fashion photography, 8k resolution, professional quality"
+    
+    if image_context:
+        enhanced_prompt += f", inspired by: {image_context}"
+    
+    return enhanced_prompt
+
+def generate_image_huggingface(prompt: str) -> bytes:
+    """Generate image using Hugging Face Stable Diffusion"""
+    API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+    headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+    
+    payload = {
+        "inputs": prompt,
+        "options": {"wait_for_model": True}
+    }
+    
+    response = requests.post(API_URL, headers=headers, json=payload)
+    
+    if response.status_code == 200:
+        return response.content
+    else:
+        raise Exception(f"Hugging Face API error: {response.status_code}")
+
+def generate_image_pollinations(prompt: str) -> bytes:
+    """Generate image using Pollinations AI (free, no API key needed)"""
+    # Clean and encode the prompt for URL
+    import urllib.parse
+    encoded_prompt = urllib.parse.quote(prompt)
+    
+    # Pollinations AI endpoint
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&model=flux&enhance=true"
+    
+    response = requests.get(url, timeout=30)
+    
+    if response.status_code == 200:
+        return response.content
+    else:
+        raise Exception(f"Pollinations AI error: {response.status_code}")
 
 @tool("generate_design_image", return_direct=True)
 def generate_design_image(prompt: str, user_id: str = None) -> str:
     """
-    Generate a design image using Google's Gemini model with image generation capabilities.
+    Generate an actual fashion design image using AI image generation services.
     Args:
         prompt: Description of the design to generate.
-        user_id: The ID of the user making the request (automatically handled).
+        user_id: The ID of the user making the request (optional).
     Returns:
-        str: A formatted message about the image generation with embedded image data
+        str: A formatted message with the actual generated image
     """
-    if not GOOGLE_API_KEY:
-        raise ValueError("Google API key not found.")
     
     try:
-        # Configure the client with API key
-        os.environ['GOOGLE_API_KEY'] = GOOGLE_API_KEY
-        client = genai.Client()
+        image_context = None
         
-        # Generate content with image generation
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-preview-image-generation",
-            contents=[prompt],
-            config=types.GenerateContentConfig(
-                response_modalities=['TEXT', 'IMAGE']
-            )
-        )
-        
-        # Extract image from response
-        for part in response.candidates[0].content.parts:
-            if part.inline_data is not None:
-                # Get the image data
-                image_data = part.inline_data.data
+        # Get image context if an image is uploaded
+        if hasattr(st.session_state, 'current_image_bytes') and st.session_state.current_image_bytes:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=GOOGLE_API_KEY)
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
-                # Convert to base64 string
-                image_b64 = base64.b64encode(image_data).decode('utf-8')
-                download_link = f"data:image/png;base64,{image_b64}"
+                # Convert bytes to PIL Image for analysis
+                image_data = base64.b64decode(st.session_state.current_image_bytes)
+                image = Image.open(BytesIO(image_data))
                 
-                # Return a formatted string that includes the image data for display
-                return f"🎨 **Image Generated Successfully!**\n\n![Generated Design]({download_link})\n\nI've created a design based on your prompt: '{prompt}'. The image has been generated and is displayed above."
+                # Analyze the uploaded image for context
+                analysis_response = model.generate_content([
+                    "Describe this fashion item in 10 words or less for image generation: style, colors, key features",
+                    image
+                ])
+                image_context = analysis_response.text.strip()
+            except Exception as e:
+                print(f"Could not analyze uploaded image: {e}")
         
-        # If no image was found in response
-        raise ValueError("No image was generated in the response")
+        # Enhance the prompt for better image generation
+        enhanced_prompt = enhance_design_prompt(prompt, image_context)
+        
+        image_bytes = None
+        
+        # Try Pollinations AI first (free, no API key needed)
+        try:
+            image_bytes = generate_image_pollinations(enhanced_prompt)
+        except Exception as e:
+            print(f"Pollinations AI failed: {e}")
+            
+            # Fallback to Hugging Face if available
+            if HUGGINGFACE_API_KEY:
+                try:
+                    image_bytes = generate_image_huggingface(enhanced_prompt)
+                except Exception as e:
+                    print(f"Hugging Face failed: {e}")
+        
+        if image_bytes:
+            # Convert to base64 for display
+            image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+            
+            # Create response with actual image
+            response_message = f"""🎨 **Fashion Design Generated!**
+
+![Generated Design](data:image/png;base64,{image_b64})
+
+**Original Request:** {prompt}
+"""
+            
+            if image_context:
+                response_message += f"**Inspired by uploaded image:** {image_context}\n"
+            
+            response_message += f"\n**Enhanced Prompt Used:** {enhanced_prompt}\n\n✨ Your custom fashion design is ready!"
+            
+            return response_message
+        else:
+            return f"❌ Sorry, I couldn't generate an image right now. All image generation services are currently unavailable. Please try again later.\n\n**Your request:** {prompt}"
         
     except Exception as e:
-        raise ValueError(f"Failed to generate image: {e}")
+        return f"❌ Error generating image: {str(e)}\n\n**Your request:** {prompt}"

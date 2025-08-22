@@ -8,6 +8,9 @@ import torch
 import open_clip
 from typing import Optional
 
+# Disable ChromaDB telemetry to prevent errors
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+
 # Local vector store (ChromaDB)
 try:
     # Newer Chroma API (>=0.4)

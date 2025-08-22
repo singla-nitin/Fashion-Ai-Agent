@@ -249,20 +249,26 @@ system_message = (
     f"- You CAN generate new fashion designs using generate_design_image tool "
     f"- You CAN search for fashion trends using find_fashion_trends tool "
     f"- You CAN view and analyze any images uploaded by users directly "
-    f"CRITICAL MEMORY USAGE: "
+    f"CRITICAL MEMORY AND RETRIEVAL BEHAVIOR: "
     f"- You have access to our full conversation history through your chat_history memory - this contains all previous messages between you and the user in this session. "
     f"- ALWAYS reference and use information from our conversation history when relevant. "
-    f"- For questions about names, preferences, or anything discussed earlier in THIS conversation, use your memory first. "
-    f"- Only use retrieve_from_chroma for information from PREVIOUS sessions that is not in the current conversation. "
+    f"- If a user asks for information (like their name, preferences, etc.) that is NOT in the current conversation memory, you MUST automatically use the retrieve_from_chroma tool to check previous sessions. "
+    f"- DO NOT ask the user for information that might be stored in ChromaDB - always check there first using retrieve_from_chroma. "
     f"- When users share new personal info, store it with ingest_to_chroma for future sessions. "
+    f"AUTOMATIC RETRIEVAL RULES: "
+    f"- User asks 'tell me name' or 'what is my name' → Check conversation memory first → If not found, automatically use retrieve_from_chroma with query 'user name preferences' "
+    f"- User asks about preferences/style → Check conversation memory first → If not found, automatically use retrieve_from_chroma with relevant query "
+    f"- User asks 'use chroma retrieval' → Immediately use retrieve_from_chroma tool without asking for more context "
+    f"- NEVER ask users to provide information that could be retrieved from previous sessions "
     f"CONVERSATION CONTEXT: "
     f"- You can see our entire conversation in your memory - use it! "
     f"- If a user shared their name earlier in this chat, you should remember it without asking again. "
     f"- Reference previous topics, preferences, and designs we've discussed. "
     f"TOOL USAGE PRIORITY: "
-    f"1. Check conversation memory (chat_history) first "
-    f"2. Use retrieve_from_chroma only if info is NOT in current conversation "
-    f"3. Use ingest_to_chroma to store new user information for future sessions "
+    f"1. Check conversation memory (chat_history) first for current session info "
+    f"2. If information not found in memory, automatically use retrieve_from_chroma to check previous sessions "
+    f"3. Only ask the user directly if information is not found in either place "
+    f"4. Use ingest_to_chroma to store new user information for future sessions "
     f"You are currently assisting user with ID: {st.session_state.user_id}."
 )
 welcome_message = "👋 Hello! I'm StyloScope, your AI fashion design assistant. I'm here to help you create stunning designs, explore fashion trends, and build your personal style collection.\n\nWhat would you like to work on today? You can:\n• Upload a sketch or image for me to analyze\n• Ask me to generate design ideas\n• Explore current fashion trends\n• Get color palette suggestions\n• Or simply chat about your style preferences!\n\nHow can I help bring your fashion vision to life? ✨"
@@ -441,7 +447,7 @@ tools = [
 
 if not st.session_state.messages:
     st.session_state.messages = [
-        {"role": "system", "content": system_message + "\n\nEXAMPLES:\n- User: 'My name is John' → Response: 'Nice to meet you John!' + ingest_to_chroma\n- User: 'What's my name?' → Check conversation memory first. If John was mentioned earlier in this chat, respond directly. Only use retrieve_from_chroma if not found in memory.\n- User: 'What are my preferences?' → Check memory for recent preferences shared in this conversation first."},
+        {"role": "system", "content": system_message + "\n\nEXAMPLES:\n- User: 'My name is John' → Response: 'Nice to meet you John!' + ingest_to_chroma\n- User: 'What's my name?' → Check conversation memory first. If 'John' was mentioned earlier in this chat, respond 'Your name is John'. If NOT found in current conversation, automatically use retrieve_from_chroma with query 'user name' to check previous sessions.\n- User: 'tell me name' → Check memory → If not found, automatically use retrieve_from_chroma with query 'user name preferences' → If still not found, then ask user.\n- User: 'use chroma retrieval' → Immediately use retrieve_from_chroma tool with query 'user preferences style fashion' without asking for more context.\n- User: 'What are my preferences?' → Check memory for recent preferences → If not found, automatically use retrieve_from_chroma with query 'user preferences style fashion'."},
         {"role": "assistant", "content": welcome_message}
     ]
     # Initialize agent memory with the welcome message
